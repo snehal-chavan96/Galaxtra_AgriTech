@@ -8,7 +8,12 @@
 </head>
 <body class="bg-green-100 flex flex-col items-center p-6 min-h-screen">
     
-    <h2 class="text-3xl font-bold text-green-700 mb-6"> Agritech Chatbot</h2>
+    <h2 class="text-3xl font-bold text-green-700 mb-6">🌾 Agritech Chatbot</h2>
+    
+    <!-- Scrape Data Button -->
+    <button onclick="scrapeData()" class="bg-green-600 text-white px-4 py-2 rounded-lg shadow hover:bg-green-700 transition">
+        🔄 Scrape Agricultural News
+    </button>
 
     <!-- Chat Container -->
     <div class="w-full max-w-2xl mt-6 bg-white shadow-lg rounded-lg p-4">
@@ -18,57 +23,120 @@
     <!-- Chat Input -->
     <div class="flex items-center w-full max-w-2xl mt-4">
         <input type="text" id="userInput" placeholder="Ask something..." 
-            class="flex-1 p-3 border rounded-l-lg focus:outline-none focus:ring-2 focus:ring-green-500" />
+            class="flex-1 p-3 border rounded-l-lg focus:outline-none focus:ring-2 focus:ring-green-500" 
+            onkeypress="handleKeyPress(event)" />
         <button onclick="sendMessage()" class="bg-green-600 text-white px-6 py-3 rounded-r-lg shadow hover:bg-green-700 transition">
             Send
         </button>
     </div>
 
     <script>
+        document.addEventListener("DOMContentLoaded", loadChatHistory);
+
         async function scrapeData() {
             try {
                 const response = await fetch("http://localhost:8000/scrape", {
                     method: "GET",
-                    headers: {
-                        "Authorization": "Bearer 09d1b1c97d891bfeec629885a3ac45ef7b67edf7f26a03ad17b30ccb29e8d8f4"
-                    }
+                    headers: { "Authorization": "Bearer YOUR_API_KEY" }
                 });
 
-                const data = await response.json();
+                if (!response.ok) throw new Error("Failed to scrape data");
                 alert("Scraped Data Added!");
             } catch (error) {
                 alert("Error fetching data!");
             }
         }
+        
+        document.addEventListener("DOMContentLoaded", loadChatHistory);
 
-        async function sendMessage() {
-            const userInput = document.getElementById("userInput").value;
-            if (!userInput) {
-                alert("Please enter a question!");
-                return;
-            }
-
-            const chatbox = document.getElementById("chatbox");
-            chatbox.innerHTML += `<p class='text-blue-600 font-semibold'>You: ${userInput}</p>`;
-
-            try {
-                const response = await fetch("http://localhost:8000/chat", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "Authorization": "Bearer YOUR_API_KEY"
-                    },
-                    body: JSON.stringify({ message: userInput })
-                });
-
-                const data = await response.json();
-                chatbox.innerHTML += `<p class='text-green-700 font-semibold'>Bot: ${data.response}</p>`;
-            } catch (error) {
-                chatbox.innerHTML += `<p class='text-red-500'>Error getting response!</p>`;
-            }
-
-            document.getElementById("userInput").value = "";
+    async function sendMessage() {
+        const userInput = document.getElementById("userInput").value.trim();
+        if (!userInput) {
+            alert("Please enter a question!");
+            return;
         }
+
+        const chatbox = document.getElementById("chatbox");
+        appendMessage("You", userInput, "text-blue-600 font-semibold");
+
+        // Detect and store user name
+        checkForName(userInput);
+
+        // Show Typing Indicator
+        const typingIndicator = appendMessage("Bot", "Typing...", "text-gray-500 italic");
+
+        try {
+            const storedName = sessionStorage.getItem("userName") || "";
+
+            const response = await fetch("http://localhost:8000/chat", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": "Bearer YOUR_API_KEY"
+                },
+                body: JSON.stringify({ message: userInput, name: storedName }) // ✅ Send stored name
+            });
+
+            const data = await response.json();
+
+            // Remove Typing Indicator
+            chatbox.removeChild(typingIndicator);
+
+            let botResponse = data.response || "Sorry, I couldn’t understand.";
+
+            // If user name exists, personalize the response
+            if (storedName) {
+                botResponse = botResponse.replace("{name}", storedName);
+            }
+
+            appendMessage("Bot", botResponse, "text-green-700 font-semibold");
+
+            // Save chat to session storage
+            saveChatHistory(userInput, botResponse);
+        } catch (error) {
+            chatbox.removeChild(typingIndicator);
+            appendMessage("Bot", "Error getting response!", "text-red-500");
+        }
+
+        document.getElementById("userInput").value = "";
+        chatbox.scrollTop = chatbox.scrollHeight;
+    }
+
+    function checkForName(message) {
+        const namePattern = /my name is (\w+)/i;
+        const match = message.match(namePattern);
+        if (match) {
+            sessionStorage.setItem("userName", match[1]); // ✅ Store name in sessionStorage
+            appendMessage("Bot", `Nice to meet you, ${match[1]}!`, "text-green-700 font-semibold");
+        }
+    }
+
+
+    function appendMessage(sender, message, className) {
+        const chatbox = document.getElementById("chatbox");
+        const messageElement = document.createElement("p");
+        messageElement.className = className;
+        messageElement.textContent = `${sender}: ${message}`;
+        chatbox.appendChild(messageElement);
+        chatbox.scrollTop = chatbox.scrollHeight;
+        return messageElement;
+    }
+
+    function saveChatHistory(userMessage, botResponse) {
+        let chatHistory = JSON.parse(sessionStorage.getItem("chatHistory")) || [];
+        chatHistory.push({ user: userMessage, bot: botResponse });
+        sessionStorage.setItem("chatHistory", JSON.stringify(chatHistory));
+    }
+
+    function loadChatHistory() {
+        const chatbox = document.getElementById("chatbox");
+        const chatHistory = JSON.parse(sessionStorage.getItem("chatHistory")) || [];
+        chatHistory.forEach(chat => {
+            appendMessage("You", chat.user, "text-blue-600 font-semibold");
+            appendMessage("Bot", chat.bot, "text-green-700 font-semibold");
+        });
+    }
     </script>
+
 </body>
 </html>

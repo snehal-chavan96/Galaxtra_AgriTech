@@ -3,3 +3,5 @@ requests
 chromadb
 sentence-transformers
 python-dotenv
+langdetect
+googletrans
